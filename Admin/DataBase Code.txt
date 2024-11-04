@@ -1,0 +1,473 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <ctime>
+#include <cstdlib>
+#include <iomanip>
+#define LIGHT_BLUE "\033[1;92m"
+#define RESET_COLOR "\033[0m"
+
+using namespace std;
+
+string trim(const string &str)
+{
+    size_t first = str.find_first_not_of(' ');
+    if (string::npos == first)
+    {
+        return str;
+    }
+    size_t last = str.find_last_not_of(' ');
+    return str.substr(first, (last - first + 1));
+}
+
+string toLower(const string &str)
+{
+    string lowerStr = str;
+    transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+    return lowerStr;
+}
+
+vector<vector<string>> loadData(const string &filename)
+{
+    vector<vector<string>> data;
+    ifstream file(filename);
+    string line, word;
+
+    while (getline(file, line))
+    {
+        vector<string> row;
+        stringstream ss(line);
+        while (getline(ss, word, ','))
+        {
+            row.push_back(trim(word));
+        }
+        data.push_back(row);
+    }
+    file.close();
+    return data;
+}
+
+void saveData(const string &filename, const vector<vector<string>> &data)
+{
+    ofstream file(filename);
+    for (const auto &row : data)
+    {
+        for (size_t i = 0; i < row.size(); ++i)
+        {
+            file << row[i];
+            if (i < row.size() - 1)
+                file << ",";
+        }
+        file << endl;
+    }
+    file.close();
+}
+
+void logActivity(const string &activity, const string &username, const string &oldValue, const string &newValue, const string &remark)
+{
+    ofstream file("activities.csv", ios::app);
+    time_t now = time(0);
+    tm *ltm = localtime(&now);
+
+    file << activity << "," << username << "," << (ltm->tm_year + 1900) << "-" << (ltm->tm_mon + 1) << "-" << ltm->tm_mday << " " << ltm->tm_hour << ":" << ltm->tm_min << ":" << ltm->tm_sec << "," << oldValue << "," << newValue << "," << remark << endl;
+
+    file.close();
+}
+
+string generateComplaintNumber()
+{
+    string complaintNumber = "CMP";
+    for (int i = 0; i < 9; ++i)
+    {
+        complaintNumber += to_string(rand() % 10);
+    }
+    return complaintNumber;
+}
+
+void insertData(vector<vector<string>> &data)
+{
+    string newUsername;
+    cout << "Enter user name: ";
+    cin >> newUsername;
+
+    for (const auto &row : data)
+    {
+        if (row[0] == newUsername)
+        {
+            cout << "Username already exists. Try another username." << endl;
+            return;
+        }
+    }
+
+    vector<string> newRow(4);
+    newRow[0] = newUsername;
+    cout << "Enter password: ";
+    cin >> newRow[1];
+    cout << "Enter mobile number: ";
+    cin >> newRow[2];
+    cout << "Enter email: ";
+    cin >> newRow[3];
+
+    for (auto &field : newRow)
+    {
+        field = trim(field);
+    }
+
+    int countMobile = 0, countEmail = 0;
+    for (const auto &row : data)
+    {
+        if (row[2] == newRow[2])
+        {
+            countMobile++;
+            if (countMobile >= 5)
+            {
+                cout << LIGHT_BLUE << "Cannot insert data. Mobile number already exists in 5 accounts." << RESET_COLOR << endl;
+                return;
+            }
+        }
+        if (row[3] == newRow[3])
+        {
+            countEmail++;
+            if (countEmail >= 5)
+            {
+                cout << LIGHT_BLUE << "Cannot insert data. Email already exists in 5 accounts." << RESET_COLOR << endl;
+                return;
+            }
+        }
+    }
+
+    data.push_back(newRow);
+    logActivity("New user inserted", newUsername, "", "", "");
+}
+
+void retrieveData(const vector<vector<string>> &data)
+{
+    int searchChoice;
+    string searchTerm;
+    bool found = false;
+
+    cout << "Search by: 1) Username 2) Mobile Number 3) Email: ";
+    cin >> searchChoice;
+    cin.ignore();
+
+    switch (searchChoice)
+    {
+    case 1:
+        cout << "Enter username: ";
+        break;
+    case 2:
+        cout << "Enter mobile number: ";
+        break;
+    case 3:
+        cout << "Enter email: ";
+        break;
+    default:
+        cout << "Invalid choice!" << endl;
+        return;
+    }
+
+    getline(cin, searchTerm);
+    searchTerm = toLower(trim(searchTerm));
+
+    for (const auto &row : data)
+    {
+        string fieldToSearch;
+        switch (searchChoice)
+        {
+        case 1:
+            fieldToSearch = toLower(trim(row[0]));
+            break;
+        case 2:
+            fieldToSearch = toLower(trim(row[2]));
+            break;
+        case 3:
+            fieldToSearch = toLower(trim(row[3]));
+            break;
+        }
+
+        if (fieldToSearch == searchTerm)
+        {
+            cout << endl;
+            cout << "User Name: " << row[0] << endl;
+            cout << "Password: " << row[1] << endl;
+            cout << "Mobile Number: " << row[2] << endl;
+            cout << "Email: " << row[3] << endl;
+            cout << endl;
+            found = true;
+
+            string remark;
+            cout << "Enter a remark or comment: ";
+            getline(cin, remark);
+
+            logActivity("Data retrieved", row[0], "", "", remark);
+        }
+    }
+
+    if (!found)
+    {
+        cout << "INVALID Input. Kindly enter a valid Username, Mobile Number, or Email." << endl;
+    }
+}
+
+void deleteData(vector<vector<string>> &data)
+{
+    string usernameToDelete;
+    cout << "Enter username to delete: ";
+    cin >> usernameToDelete;
+
+    auto it = find_if(data.begin(), data.end(), [&](const vector<string> &row)
+                      { return row[0] == usernameToDelete; });
+
+    if (it != data.end())
+    {
+        string password;
+        cout << "Enter password to verify deletion: ";
+        cin >> password;
+        if ((*it)[1] == password)
+        {
+
+            data.erase(it);
+
+            cout << LIGHT_BLUE << "Account Deleted Successfully from the DataBase." << RESET_COLOR << endl;
+
+            string remark;
+            cout << "Enter a remark or comment: ";
+            cin.ignore();
+            getline(cin, remark);
+
+            logActivity("Data deleted", usernameToDelete, "", "", remark);
+        }
+        else
+        {
+            cout << "Incorrect password. Deletion failed." << endl;
+        }
+    }
+    else
+    {
+        cout << "Username not found. Deletion failed." << endl;
+    }
+}
+
+void modifyData(vector<vector<string>> &data)
+{
+    string oldValue, newValue;
+    string usernameToModify;
+    cout << "Enter username to modify: ";
+    cin >> usernameToModify;
+
+    auto it = find_if(data.begin(), data.end(), [&](const vector<string> &row)
+                      { return row[0] == usernameToModify; });
+
+    if (it != data.end())
+    {
+        string password;
+        cout << "Enter password to verify modification: ";
+        cin >> password;
+        if ((*it)[1] == password)
+        {
+            int choice;
+            cout << LIGHT_BLUE << "Choose which detail to modify:" << endl;
+            cout << "1) Password" << endl;
+            cout << "2) Mobile Number" << endl;
+            cout << "3) Email" << RESET_COLOR << endl;
+            cin >> choice;
+            cin.ignore();
+
+            oldValue = (*it)[choice];
+            switch (choice)
+            {
+            case 1:
+                cout << LIGHT_BLUE << "Enter new password: " << RESET_COLOR;
+                cin >> newValue;
+                (*it)[1] = newValue;
+                break;
+            case 2:
+                cout << LIGHT_BLUE << "Enter new mobile number: " << RESET_COLOR;
+                cin >> newValue;
+                (*it)[2] = newValue;
+                break;
+            case 3:
+                cout << LIGHT_BLUE << "Enter new email: " << RESET_COLOR;
+                cin >> newValue;
+                (*it)[3] = newValue;
+                break;
+            default:
+                cout << LIGHT_BLUE << "Invalid choice!" << RESET_COLOR << endl;
+                return;
+            }
+
+            cout << "Account details modified successfully." << endl;
+        }
+        else
+        {
+            cout << "Incorrect password. Modification failed." << endl;
+            return;
+        }
+    }
+    else
+    {
+        cout << "Username not found. Modification failed." << endl;
+        return;
+    }
+
+    string remark;
+    cout << "Enter a remark or comment: ";
+    cin.ignore();
+    getline(cin, remark);
+
+    logActivity("Data modified", usernameToModify, oldValue, newValue, remark);
+}
+
+void printDataCSV(const vector<vector<string>> &data)
+{
+    for (const auto &row : data)
+    {
+        for (size_t i = 0; i < row.size(); ++i)
+        {
+            cout << row[i];
+            if (i < row.size() - 1)
+                cout << ",";
+        }
+        cout << endl;
+    }
+}
+
+void logComplaint(const string &username, const string &description, const string &complaintNumber, const string &remark)
+{
+    ofstream file("complaints.csv", ios::app);
+    file << username << "," << description << "," << complaintNumber << "," << remark << endl;
+    file.close();
+}
+
+void addComplaint(const vector<vector<string>> &data)
+{
+    string username, description;
+    cout << "Enter username: ";
+    cin >> username;
+    cin.ignore();
+
+    auto it = find_if(data.begin(), data.end(), [&](const vector<string> &row)
+                      { return row[0] == username; });
+
+    if (it != data.end())
+    {
+        cout << "Enter complaint description: ";
+        getline(cin, description);
+
+        string complaintNumber = generateComplaintNumber();
+
+        string remark;
+        cout << "Enter a remark or comment: ";
+        getline(cin, remark);
+
+        logComplaint(complaintNumber , username, description, remark);
+        logActivity("New complaint added",complaintNumber, username, "",  remark);
+
+        cout << LIGHT_BLUE << "Complaint added successfully. Your complaint number is: " << complaintNumber << RESET_COLOR << endl;
+    }
+    else
+    {
+        cout << LIGHT_BLUE << "Username not found. Complaint not added." << RESET_COLOR << endl;
+    }
+}
+
+void viewComplaint()
+{
+    string complaintNumber;
+    cout << "Enter complaint number: ";
+    cin >> complaintNumber;
+    cin.ignore();
+
+    ifstream file("complaints.csv");
+    string line, number, username, description, remark;
+    bool found = false;
+
+    while (getline(file, line))
+    {
+        stringstream ss(line);
+        getline(ss, number, ',');
+        getline(ss, username, ',');
+        getline(ss, description, ',');
+        getline(ss, remark, ',');
+
+        if (number == complaintNumber)
+        {
+            cout << LIGHT_BLUE << "Username: " << username << endl;
+            cout << "Complaint Description: " << description << endl;
+            cout << "Remarks: " << remark << RESET_COLOR << endl;
+
+            cout << "Enter a remark or comment: ";
+            string newRemark;
+            getline(cin, newRemark);
+
+            logActivity("Complaint viewed",number, username, description, newRemark);
+            found = true;
+            break;
+        }
+    }
+
+    file.close();
+
+    if (!found)
+    {
+        cout << LIGHT_BLUE << "Complaint number not found." << RESET_COLOR << endl;
+    }
+}
+
+int main()
+{
+    srand(time(0));
+    const string filename = "data.csv";
+    vector<vector<string>> data = loadData(filename);
+
+    int choice;
+    cout << LIGHT_BLUE << "Press 1 to print all data in CSV format." << endl;
+    cout << "Press 2 to retrieve data." << endl;
+    cout << "Press 3 to insert new data." << endl;
+    cout << "Press 4 to delete data." << endl;
+    cout << "Press 5 to modify account details." << endl;
+    cout << "Press 6 to add a new complaint." << endl;
+    cout << "Press 7 to view a complaint." << RESET_COLOR << endl;
+    cin >> choice;
+
+    if (choice == 1)
+    {
+        cout << "Printing all data in CSV format..." << endl;
+        printDataCSV(data);
+    }
+    else if (choice == 2)
+    {
+        retrieveData(data);
+    }
+    else if (choice == 3)
+    {
+        insertData(data);
+    }
+    else if (choice == 4)
+    {
+        deleteData(data);
+    }
+    else if (choice == 5)
+    {
+        modifyData(data);
+    }
+    else if (choice == 6)
+    {
+        addComplaint(data);
+    }
+    else if (choice == 7)
+    {
+        viewComplaint();
+    }
+    else
+    {
+        cout << "Invalid choice!" << endl;
+    }
+
+    saveData(filename, data);
+
+    return 0;
+}
